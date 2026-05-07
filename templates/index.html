@@ -1,0 +1,939 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CloudVault — File Upload System</title>
+  <style>
+    /* ─── Reset & Base ─────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a0a0f;
+      --surface:  rgba(255,255,255,0.05);
+      --border:   rgba(255,255,255,0.1);
+      --accent:   #7c3aed;
+      --accent2:  #a855f7;
+      --green:    #22c55e;
+      --red:      #ef4444;
+      --yellow:   #f59e0b;
+      --blue:     #3b82f6;
+      --text:     #f1f5f9;
+      --muted:    #94a3b8;
+      --radius:   16px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 10%, rgba(124,58,237,0.15) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 40% at 80% 80%, rgba(168,85,247,0.1) 0%, transparent 60%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ─── Layout ─────────────────────────────────────── */
+    .app { position: relative; z-index: 1; min-height: 100vh; }
+
+    /* ─── Auth Screen ─────────────────────────────────── */
+    #auth-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .auth-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      border-radius: var(--radius);
+      padding: 48px 40px;
+      width: 100%;
+      max-width: 420px;
+    }
+
+    .auth-logo {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    .auth-logo .icon {
+      font-size: 48px;
+      display: block;
+      margin-bottom: 12px;
+    }
+    .auth-logo h1 {
+      font-size: 28px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a855f7, #7c3aed);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .auth-logo p {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .auth-tabs {
+      display: flex;
+      background: rgba(255,255,255,0.03);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 28px;
+      border: 1px solid var(--border);
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--muted);
+      transition: all 0.2s;
+    }
+    .auth-tab.active {
+      background: var(--accent);
+      color: white;
+    }
+
+    .form-group { margin-bottom: 18px; }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+    .form-group input {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 15px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-group input:focus { border-color: var(--accent); }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: white;
+      width: 100%;
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-danger { background: rgba(239,68,68,0.15); color: var(--red); border: 1px solid rgba(239,68,68,0.3); padding: 8px 14px; font-size: 13px; border-radius: 8px; }
+    .btn-ghost  { background: transparent; color: var(--muted); border: 1px solid var(--border); padding: 8px 14px; font-size: 13px; border-radius: 8px; }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-sm { padding: 7px 14px; font-size: 13px; }
+
+    .alert {
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-size: 14px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .alert.error   { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: #fca5a5; }
+    .alert.success { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); color: #86efac; }
+    .alert.show { display: block; }
+
+    /* ─── Main App ─────────────────────────────────────── */
+    #main-screen { display: none; }
+
+    /* Header */
+    .header {
+      background: rgba(10,10,15,0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 32px;
+      height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-logo { font-size: 20px; font-weight: 700; background: linear-gradient(135deg, #a855f7, #7c3aed); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .user-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 6px 14px 6px 8px;
+      border-radius: 100px;
+      font-size: 14px;
+    }
+    .user-avatar {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+    }
+
+    /* Main content */
+    .main-content {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    /* Stats row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(10px);
+      border-radius: var(--radius);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .stat-icon {
+      width: 48px; height: 48px;
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+    .stat-icon.purple { background: rgba(124,58,237,0.2); }
+    .stat-icon.green  { background: rgba(34,197,94,0.2);  }
+    .stat-icon.blue   { background: rgba(59,130,246,0.2); }
+    .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .stat-value { font-size: 22px; font-weight: 700; }
+
+    /* Storage bar */
+    .storage-bar-wrap {
+      margin-top: 10px;
+      width: 100%;
+    }
+    .storage-bar-track {
+      height: 6px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .storage-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 99px;
+      transition: width 0.5s ease;
+    }
+
+    /* Upload zone */
+    .upload-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      margin-bottom: 28px;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .drop-zone {
+      border: 2px dashed rgba(124,58,237,0.4);
+      border-radius: 12px;
+      padding: 40px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(124,58,237,0.06);
+    }
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+    .drop-icon { font-size: 40px; margin-bottom: 12px; }
+    .drop-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .drop-sub { font-size: 13px; color: var(--muted); }
+
+    /* Upload progress */
+    #upload-progress-wrap { display: none; margin-top: 16px; }
+    .progress-item {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 10px;
+    }
+    .progress-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .progress-name { font-size: 14px; font-weight: 500; }
+    .progress-size { font-size: 12px; color: var(--muted); }
+    .progress-track {
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 99px;
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .progress-fill.done { background: linear-gradient(90deg, #22c55e, #16a34a); }
+    .progress-fill.error { background: var(--red); }
+
+    /* File manager */
+    .files-section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .files-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    /* Search */
+    .search-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 14px;
+      font-size: 14px;
+      color: var(--text);
+    }
+    .search-box input {
+      background: none;
+      border: none;
+      outline: none;
+      color: var(--text);
+      font-size: 14px;
+      width: 180px;
+    }
+    .search-box input::placeholder { color: var(--muted); }
+
+    /* File list */
+    .file-list { padding: 8px 16px 16px; }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 12px;
+      border-radius: 10px;
+      transition: background 0.15s;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .file-item:last-child { border-bottom: none; }
+    .file-item:hover { background: rgba(255,255,255,0.04); }
+
+    .file-icon-wrap {
+      width: 44px; height: 44px;
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      flex-shrink: 0;
+    }
+
+    .file-info { flex: 1; min-width: 0; }
+    .file-name { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .file-meta { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+    .file-actions { display: flex; gap: 8px; flex-shrink: 0; }
+    .btn-download {
+      background: rgba(59,130,246,0.15);
+      color: #60a5fa;
+      border: 1px solid rgba(59,130,246,0.3);
+      padding: 7px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .btn-download:hover { background: rgba(59,130,246,0.25); }
+    .btn-del {
+      background: rgba(239,68,68,0.1);
+      color: #f87171;
+      border: 1px solid rgba(239,68,68,0.25);
+      width: 34px; height: 34px;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .btn-del:hover { background: rgba(239,68,68,0.25); }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 60px 24px;
+      color: var(--muted);
+    }
+    .empty-state .icon { font-size: 52px; margin-bottom: 16px; opacity: 0.4; }
+    .empty-state p { font-size: 16px; }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      border-radius: 12px;
+      padding: 14px 20px;
+      font-size: 14px;
+      font-weight: 500;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      z-index: 999;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      max-width: 320px;
+      animation: slideUp 0.3s ease;
+    }
+    #toast.show { display: flex; }
+    @keyframes slideUp {
+      from { transform: translateY(10px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    /* ─── Responsive ──────────────────────────────────── */
+    @media (max-width: 600px) {
+      .header { padding: 0 16px; }
+      .main-content { padding: 20px 16px; }
+      .auth-card { padding: 32px 24px; }
+      .file-actions .btn-download span { display: none; }
+      .search-box input { width: 120px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ═══════════ AUTH SCREEN ═══════════ -->
+  <div id="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <span class="icon">☁️</span>
+        <h1>CloudVault</h1>
+        <p>Your personal file storage</p>
+      </div>
+
+      <div class="auth-tabs">
+        <div class="auth-tab active" onclick="switchTab('login')">Login</div>
+        <div class="auth-tab" onclick="switchTab('register')">Register</div>
+      </div>
+
+      <div id="auth-alert" class="alert"></div>
+
+      <!-- Login form -->
+      <div id="login-form">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="login-user" placeholder="Enter username" autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="login-pass" placeholder="Enter password" autocomplete="current-password" />
+        </div>
+        <button class="btn btn-primary" onclick="doLogin()">🔓 Login</button>
+      </div>
+
+      <!-- Register form -->
+      <div id="register-form" style="display:none">
+        <div class="form-group">
+          <label>Username</label>
+          <input type="text" id="reg-user" placeholder="Choose a username" autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="reg-pass" placeholder="Min 6 characters" autocomplete="new-password" />
+        </div>
+        <button class="btn btn-primary" onclick="doRegister()">🚀 Create Account</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ MAIN SCREEN ═══════════ -->
+  <div id="main-screen">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-left">
+        <span style="font-size:24px">☁️</span>
+        <span class="header-logo">CloudVault</span>
+      </div>
+      <div class="header-right">
+        <div class="user-badge">
+          <div class="user-avatar" id="user-avatar">?</div>
+          <span id="header-username">User</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="logout()">Logout</button>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <div class="main-content">
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-icon purple">📁</div>
+          <div>
+            <div class="stat-label">Total Files</div>
+            <div class="stat-value" id="stat-files">0</div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon blue">💾</div>
+          <div style="flex:1">
+            <div class="stat-label">Storage Used</div>
+            <div class="stat-value" id="stat-size">0 B</div>
+            <div class="storage-bar-wrap">
+              <div class="storage-bar-track">
+                <div class="storage-bar-fill" id="storage-fill" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon green">✅</div>
+          <div>
+            <div class="stat-label">Limit</div>
+            <div class="stat-value">16 MB</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">per file</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload -->
+      <div class="upload-section">
+        <div class="section-title">⬆️ Upload Files</div>
+
+        <div class="drop-zone" id="drop-zone">
+          <input type="file" id="file-input" multiple onchange="handleFiles(this.files)" />
+          <div class="drop-icon">📂</div>
+          <div class="drop-title">Drag & drop files here</div>
+          <div class="drop-sub">or click to browse &nbsp;·&nbsp; Max 16 MB per file</div>
+          <div class="drop-sub" style="margin-top:6px">
+            Supports: images, PDF, docs, spreadsheets, code, zip, mp3/mp4…
+          </div>
+        </div>
+
+        <div id="upload-progress-wrap"></div>
+      </div>
+
+      <!-- File manager -->
+      <div class="files-section">
+        <div class="files-header">
+          <div class="section-title" style="margin:0">🗂️ Your Files</div>
+          <div class="search-box">
+            🔍 <input type="text" id="search-input" placeholder="Search files…" oninput="filterFiles()" />
+          </div>
+        </div>
+        <div class="file-list" id="file-list">
+          <div class="empty-state">
+            <div class="icon">📭</div>
+            <p>No files yet — upload your first file above!</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast"></div>
+</div>
+
+<script>
+/* ─── State ───────────────────────────────────────────── */
+let token    = localStorage.getItem('cv_token') || '';
+let username = localStorage.getItem('cv_user')  || '';
+let allFiles = [];
+
+/* ─── Init ────────────────────────────────────────────── */
+window.addEventListener('DOMContentLoaded', () => {
+  if (token) showApp();
+  setupDragDrop();
+  setupEnterKeys();
+});
+
+function setupEnterKeys() {
+  document.getElementById('login-pass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  document.getElementById('login-user').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+  document.getElementById('reg-pass').addEventListener('keydown',  e => { if (e.key === 'Enter') doRegister(); });
+}
+
+/* ─── Auth tab switch ─────────────────────────────────── */
+function switchTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((el, i) => {
+    el.classList.toggle('active', (i === 0 && tab === 'login') || (i === 1 && tab === 'register'));
+  });
+  document.getElementById('login-form').style.display    = tab === 'login'    ? '' : 'none';
+  document.getElementById('register-form').style.display = tab === 'register' ? '' : 'none';
+  clearAlert();
+}
+
+/* ─── Auth ────────────────────────────────────────────── */
+async function doRegister() {
+  const user = document.getElementById('reg-user').value.trim();
+  const pass = document.getElementById('reg-pass').value;
+  if (!user || !pass) return showAlert('Fill in both fields', 'error');
+
+  const res = await api('/api/register', 'POST', { username: user, password: pass });
+  if (res.ok) {
+    showAlert('Account created! Please login.', 'success');
+    switchTab('login');
+    document.getElementById('login-user').value = user;
+  } else {
+    showAlert(res.data.error || 'Registration failed', 'error');
+  }
+}
+
+async function doLogin() {
+  const user = document.getElementById('login-user').value.trim();
+  const pass = document.getElementById('login-pass').value;
+  if (!user || !pass) return showAlert('Fill in both fields', 'error');
+
+  const res = await api('/api/login', 'POST', { username: user, password: pass });
+  if (res.ok) {
+    token    = res.data.token;
+    username = res.data.username;
+    localStorage.setItem('cv_token', token);
+    localStorage.setItem('cv_user',  username);
+    showApp();
+  } else {
+    showAlert(res.data.error || 'Login failed', 'error');
+  }
+}
+
+function logout() {
+  token = ''; username = '';
+  localStorage.removeItem('cv_token');
+  localStorage.removeItem('cv_user');
+  document.getElementById('auth-screen').style.display = 'block';
+  document.getElementById('main-screen').style.display  = 'none';
+  document.getElementById('login-user').value = '';
+  document.getElementById('login-pass').value = '';
+}
+
+/* ─── Show App ────────────────────────────────────────── */
+function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('main-screen').style.display = 'block';
+  document.getElementById('header-username').textContent = username;
+  document.getElementById('user-avatar').textContent = username[0].toUpperCase();
+  loadFiles();
+  loadStats();
+}
+
+/* ─── Stats ───────────────────────────────────────────── */
+async function loadStats() {
+  const res = await api('/api/stats', 'GET');
+  if (!res.ok) return;
+  const { total_files, total_size, storage_limit } = res.data;
+  document.getElementById('stat-files').textContent = total_files;
+  document.getElementById('stat-size').textContent  = formatSize(total_size);
+  const pct = Math.min((total_size / storage_limit) * 100, 100).toFixed(1);
+  document.getElementById('storage-fill').style.width = pct + '%';
+}
+
+/* ─── File List ───────────────────────────────────────── */
+async function loadFiles() {
+  const res = await api('/api/files', 'GET');
+  if (!res.ok) return;
+  allFiles = res.data.files;
+  renderFiles(allFiles);
+}
+
+function filterFiles() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  renderFiles(allFiles.filter(f => f.name.toLowerCase().includes(q)));
+}
+
+function renderFiles(files) {
+  const container = document.getElementById('file-list');
+  if (!files.length) {
+    container.innerHTML = `
+      <div class="empty-state">
+        <div class="icon">📭</div>
+        <p>No files yet — upload your first file above!</p>
+      </div>`;
+    return;
+  }
+
+  container.innerHTML = files.map(f => `
+    <div class="file-item" id="file-${f.id}">
+      <div class="file-icon-wrap" style="background:${typeColor(f.name)}22">
+        <span>${typeEmoji(f.name)}</span>
+      </div>
+      <div class="file-info">
+        <div class="file-name" title="${esc(f.name)}">${esc(f.name)}</div>
+        <div class="file-meta">${formatSize(f.size)} &nbsp;·&nbsp; ${formatDate(f.uploaded_at)}</div>
+      </div>
+      <div class="file-actions">
+        <button class="btn-download" onclick="downloadFile(${f.id})">
+          ⬇ <span>Download</span>
+        </button>
+        <button class="btn-del" title="Delete" onclick="deleteFile(${f.id}, '${esc(f.name)}')">🗑</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ─── Upload ──────────────────────────────────────────── */
+function setupDragDrop() {
+  const zone = document.getElementById('drop-zone');
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+  });
+}
+
+async function handleFiles(fileList) {
+  const wrap = document.getElementById('upload-progress-wrap');
+  wrap.style.display = '';
+  wrap.innerHTML = '';
+
+  for (const file of fileList) {
+    await uploadSingleFile(file, wrap);
+  }
+
+  await loadFiles();
+  await loadStats();
+  document.getElementById('file-input').value = '';
+}
+
+async function uploadSingleFile(file, wrap) {
+  const itemId = 'p' + Math.random().toString(36).slice(2);
+  wrap.insertAdjacentHTML('beforeend', `
+    <div class="progress-item" id="${itemId}">
+      <div class="progress-header">
+        <span class="progress-name">${esc(file.name)}</span>
+        <span class="progress-size">${formatSize(file.size)}</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="${itemId}-fill" style="width:30%"></div>
+      </div>
+    </div>`);
+
+  const fill = document.getElementById(itemId + '-fill');
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + token },
+      body: formData
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      fill.style.width = '100%';
+      fill.classList.add('done');
+      showToast('✅ ' + file.name + ' uploaded!');
+      setTimeout(() => document.getElementById(itemId)?.remove(), 2000);
+    } else {
+      fill.style.width = '100%';
+      fill.classList.add('error');
+      showToast('❌ ' + (data.error || 'Upload failed'));
+    }
+  } catch {
+    fill.style.width = '100%';
+    fill.classList.add('error');
+    showToast('❌ Upload error — check your connection');
+  }
+}
+
+/* ─── Download ────────────────────────────────────────── */
+async function downloadFile(id) {
+  const a = document.createElement('a');
+  a.href = `/api/files/${id}/download`;
+  a.setAttribute('data-token', token);
+
+  // Use fetch to download with auth header
+  const res = await fetch(`/api/files/${id}/download`, {
+    headers: { Authorization: 'Bearer ' + token }
+  });
+
+  if (!res.ok) { showToast('❌ Download failed'); return; }
+
+  const blob = await res.blob();
+  const cd = res.headers.get('Content-Disposition') || '';
+  const match = cd.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : 'download';
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+  showToast('⬇️ Downloading ' + filename);
+}
+
+/* ─── Delete ──────────────────────────────────────────── */
+async function deleteFile(id, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+
+  const res = await api(`/api/files/${id}`, 'DELETE');
+  if (res.ok) {
+    showToast('🗑️ Deleted ' + name);
+    document.getElementById('file-' + id)?.remove();
+    allFiles = allFiles.filter(f => f.id !== id);
+    if (!allFiles.length) renderFiles([]);
+    loadStats();
+  } else {
+    showToast('❌ Delete failed');
+  }
+}
+
+/* ─── API helper ──────────────────────────────────────── */
+async function api(url, method, body) {
+  const opts = {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }
+  };
+  if (body) opts.body = JSON.stringify(body);
+  try {
+    const res = await fetch(url, opts);
+    const data = await res.json().catch(() => ({}));
+    return { ok: res.ok, status: res.status, data };
+  } catch {
+    return { ok: false, data: { error: 'Network error' } };
+  }
+}
+
+/* ─── Helpers ─────────────────────────────────────────── */
+function formatSize(bytes) {
+  if (bytes < 1024)       return bytes + ' B';
+  if (bytes < 1048576)    return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(2) + ' GB';
+}
+
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+       + ' ' + d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function typeEmoji(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const map = {
+    pdf:'📄', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️', webp:'🖼️',
+    mp3:'🎵', mp4:'🎬', wav:'🎵', mov:'🎬',
+    zip:'🗜️', rar:'🗜️', '7z':'🗜️',
+    doc:'📝', docx:'📝', txt:'📝', md:'📝',
+    xls:'📊', xlsx:'📊', csv:'📊',
+    ppt:'📊', pptx:'📊',
+    py:'🐍', js:'🟨', html:'🌐', css:'🎨', json:'📋',
+  };
+  return map[ext] || '📎';
+}
+
+function typeColor(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const map = {
+    pdf:'#ef4444', png:'#a855f7', jpg:'#a855f7', jpeg:'#a855f7', gif:'#a855f7',
+    mp3:'#f59e0b', mp4:'#f59e0b',
+    zip:'#6b7280', rar:'#6b7280',
+    doc:'#3b82f6', docx:'#3b82f6', txt:'#3b82f6',
+    xls:'#22c55e', xlsx:'#22c55e', csv:'#22c55e',
+    py:'#3b82f6', js:'#f59e0b', html:'#f97316', css:'#a855f7',
+  };
+  return map[ext] || '#94a3b8';
+}
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+function showAlert(msg, type) {
+  const el = document.getElementById('auth-alert');
+  el.textContent = msg;
+  el.className = 'alert ' + type + ' show';
+}
+function clearAlert() {
+  const el = document.getElementById('auth-alert');
+  el.className = 'alert';
+}
+</script>
+</body>
+</html>
